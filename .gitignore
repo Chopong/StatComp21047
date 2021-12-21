@@ -1,0 +1,8 @@
+Meta
+src/*.o
+src/*.so
+src/*.ddl
+.Rproj.user
+.DS_Store
+/doc/
+/Meta/

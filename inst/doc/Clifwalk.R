@@ -1,0 +1,164 @@
+## ----setup, include=FALSE-----------------------------------------------------
+knitr::opts_chunk$set(echo = TRUE)
+
+## -----------------------------------------------------------------------------
+CW_map       <- c(4,12) # the map size
+CW_epsilon   <- 0.1 # the prob that random policy uses
+CW_discount  <- 1.0 # the discount factor that reward uses
+CW_actions   <- c(1,2,3,4) # direction: 1 UP, 2 Right, 3 Down, 4 Left
+CW_start_pos <- c(4,1) # start position
+CW_end_pos   <- c(4,12) # end position
+CW_num_episodes <- 1e4 # episodes numbers
+library(progress) # demonstrate the progress when training
+
+CW_reset_Q <- function(){
+  # this function is performed to initialize the Q to feasible action prob
+  Q <- array(1.0,dim = c(CW_map[1],CW_map[2],4))
+  Q[,1,4] <- NA
+  Q[,CW_map[2],2] <- NA
+  Q[1,,1] <- NA
+  Q[CW_map[1],,3] <- NA
+  for (i in 1:CW_map[1]){
+    for (j in 1:CW_map[2]){
+      Q[i,j,] <- Q[i,j,] / sum(Q[i,j,],na.rm = TRUE)
+    }
+  }
+  return(Q)
+}
+
+CW_get_action_epsilon_policy <- function(Q,s_cur,epsilon=CW_epsilon){
+  # generate feasible actions based on Q and epsilon.
+  Qs <- Q[s_cur[1],s_cur[2],]
+  nna <- which(!is.na(Qs))
+  q_based <- Qs[nna]
+  a_based <- CW_actions[nna]
+  
+  action <- sample(a_based,1)
+  if (runif(1) >= epsilon){
+    a_max  <- a_based[q_based == max(q_based,na.rm = TRUE)]
+    if (length(a_max) > 1){
+      action <- sample(a_max,1) # The modified one
+    }
+    if (length(a_max) == 1){
+      action <- a_max
+    }
+  }
+  return(action)
+}
+
+CW_take_a_step <- function(state,action){
+  # take one step at state and action, we cat reward and next_state
+  next_state <- switch (action,
+    # "1" = c(max(state[1]-1,1),state[2]),
+    # "2" = c(state[1],min(state[2]+1, CW_map[2])),
+    # "3" = c(min(state[1]+1,CW_map[1]),state[2]),
+    # "4" = c(state[1],max(state[2]-1,1))
+    "1" = c(state[1]-1,state[2]),
+    "2" = c(state[1],state[2]+1),
+    "3" = c(state[1]+1,state[2]),
+    "4" = c(state[1],state[2]-1),
+  )
+  reward <- -1
+  if(next_state[1] == 4 & next_state[2] <= 11 & next_state[2] >= 2){
+    reward <- -100
+    next_state <- CW_start_pos
+  }
+  return(list(next_state,reward))
+}
+
+CW_one_episode <- function(Q,epsilon=CW_epsilon){
+  # generate one episode based one Q
+  reward  <- 0
+  state   <- CW_start_pos
+  action  <- CW_get_action_epsilon_policy(Q,state,epsilon)
+  episode <- array(c(state,action,0),dim = c(1,4));
+  while (T) {
+    one_step <- CW_take_a_step(state,action)
+    next_state  <- one_step[[1]]
+    reward      <- reward + one_step[[2]]
+    if(identical(next_state,CW_end_pos)){ 
+      break
+    }
+    
+    next_action  <- CW_get_action_epsilon_policy(Q,next_state,epsilon)
+    episode <- rbind(episode,c(next_state,next_action,reward))
+    state <- next_state
+    action <- next_action
+  }
+  return(episode)
+}
+
+CW_mc <- function(num_episodes = CW_num_episodes,
+                  discount_factors = CW_discount,
+                  epsilon=CW_epsilon,
+                  Q = CW_reset_Q(),
+                  using = "first"){
+  # traing the process and get the method
+  r_sum <- r_count <- array(0,dim = c(CW_map,4))
+  pb <- txtProgressBar(style=3)
+  Ts <- Gs <- numeric(CW_num_episodes)
+  start_time <- proc.time()[[3]] # record the time elapsed
+  for (i in 1:CW_num_episodes){
+    setTxtProgressBar(pb, i/CW_num_episodes)
+    episode <- CW_one_episode(Q,epsilon)
+    episode_len <- dim(episode)[1]
+    G <- 0
+    s_his <- array(0,dim = c(CW_map,4))
+    for (t in episode_len:1){
+      s_cur <- episode[t,1:2]
+      a_cur <- episode[t,3]
+      r_cur <- episode[t,4]
+      G <- discount_factors * G + r_cur
+      if ( (r_count[s_cur[1],s_cur[2],a_cur] == 0 & using == "first") | (using == "all")  ){
+        r_sum[s_cur[1],s_cur[2],a_cur]   <- r_sum[s_cur[1],s_cur[2],a_cur]   + G
+        r_count[s_cur[1],s_cur[2],a_cur] <- r_count[s_cur[1],s_cur[2],a_cur] + 1
+        Q[s_cur[1],s_cur[2],a_cur]       <- r_sum[s_cur[1],s_cur[2],a_cur]   / r_count[s_cur[1],s_cur[2],a_cur]
+        
+        s_his[s_cur[1],s_cur[2],a_cur] <- 1 
+      }
+    }
+    Gs[i] <- G
+    Ts[i] <- proc.time()[[3]] - start_time
+  }
+  close(pb)
+  return(list(Q,Gs,Ts))
+}
+
+CW_show_path <- function(Q,epsilon = 0){
+  # show path
+  path <- array(0,dim = CW_map)
+  state <- CW_start_pos
+  while (T) {
+    path[state[1],state[2]] <- path[state[1],state[2]] + 1
+    if (identical(state,CW_end_pos)){
+      break
+    }
+    action <- CW_get_action_epsilon_policy(Q,state,epsilon)
+    state  <- CW_take_a_step(state,action)[[1]]
+    if (sum(path) >= 1e5){
+      break
+    }
+  }
+  print(sum(path))
+  return(path)
+}
+
+CW_show_reward_and_pts <- function(Gs,Ts,remove0 = TRUE){
+  Tss <- Ts[-1] - Ts[-length(Ts)]
+  if (remove0 == TRUE){
+    Gs <- Gs[-1]
+    Ts <- Ts[-1]
+    Tss <- Tss[-1]
+  }
+  plot(1:length(Ts),Ts,type = "l",xlab = "episode")
+  plot(1:length(Tss),Tss,type = "l",xlab = "episode")
+  plot(1:length(Gs),Gs,type = "l",xlab = "episode")
+  
+}
+
+load("../data/Q.rdata")
+CW_show_path(Q)
+load("../data/Ts.rdata")
+load("../data/Gs.rda")
+CW_show_reward_and_pts(Gs,Ts)
+

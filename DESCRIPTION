@@ -1,0 +1,17 @@
+Package: StatComp21047
+Type: Package
+Title: Homework created by chopong
+Version: 1.0
+Date: 2021-12-14
+Author: chopong
+Maintainer: Chopong <chopong@aliyun.com>
+Description: This is a package created by chopong which is also part of homework of Class Statistical Computation by Prof. Zhang Hong.
+License: GPL (>= 2)
+Imports: Rcpp, microbenchmark, knitr, rmarkdown, Ball, MASS, RANN, boot, energy, ggplot2, progress, xtable
+LinkingTo: Rcpp
+RoxygenNote: 7.1.2
+Encoding: UTF-8
+VignetteBuilder: knitr
+Depends: R (>= 3.5.0)
+URL: http://github.com/chopong/StatComp21047
+BugReports: http://github.com/chopong/StatComp21047/issues
